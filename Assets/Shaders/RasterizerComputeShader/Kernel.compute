@@ -1,0 +1,18 @@
+// Kernel.compute
+
+#pragma kernel Render
+#pragma kernel Clear
+
+#include "Rasterizer.hlsl"
+
+[numthreads(32,18,1)]
+void Clear(uint3 id : SV_DispatchThreadID)
+{
+    ClearPixel(id.xy);
+}
+
+[numthreads(512,1,1)]
+void Render(uint3 id : SV_DispatchThreadID)
+{
+    RasterizeTriangle(id.x);
+}

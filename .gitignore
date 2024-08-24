@@ -1,0 +1,10 @@
+.vs
+Build
+Library
+Logs
+obj
+Temp
+.vsconfig
+Assembly-CSharp.csproj
+Assembly-CSharp-Editor.csproj
+NERenderer-Unity.sln
