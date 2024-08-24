@@ -18,10 +18,16 @@ struct Barycentric
 RWTexture2D<float4> frameBuffer;
 
 // Uniform Variable
-RWTexture2D<uint> ZBuffer;
+RWTexture2D<float> ZBuffer;
 
 // Uniform Variable
 StructuredBuffer<Triangle> triangleBuffer;
+
+// Uniform Variable
+RWStructuredBuffer<Triangle> triangleCameraBuffer;
+
+// Uniform Variable
+RWStructuredBuffer<Triangle> triangleNDCBuffer;
 
 // Uniform Variable
 int triangleCount;
@@ -59,6 +65,25 @@ float3 Vec4ToVec3(float4 v)
 float cross(float2 v1, float2 v2)
 {
     return v1.x * v2.y - v1.y * v2.x;
+}
+
+void WorldToCameraTransform(int index)
+{
+    [unroll]
+    for (int n = 0; n < 3; n++)
+    {
+        triangleCameraBuffer[index].vertex[n] = Vec4ToVec3(mul(worldToCamera, float4(triangleBuffer[index].vertex[n], 1.0f)));
+    }
+}
+
+void CameraToNDCTransform(int index)
+{
+    [unroll]
+    for (int n = 0; n < 3; n++)
+    {
+        triangleNDCBuffer[index].vertex[n] = Vec4ToVec3(mul(projectionMatrix, float4(triangleCameraBuffer[index].vertex[n], 1.0f)));
+        triangleNDCBuffer[index].vertex[n].xy *= -1.0f;
+    }
 }
 
 int2 NDCToScreenIndex(float2 p)
@@ -111,48 +136,22 @@ Barycentric GetTriangleBarycentric(Triangle tri, float2 p, float3 z)
     }
 }
 
-void RasterizeTriangle(int index)
+void RasterizeTriangle(uint3 id)
 {
-    Triangle tri = triangleBuffer[index];
-    Triangle triCam, triNDC;
-    float2 boundMin = (float2) 1.#INF;
-    float2 boundMax = (float2) -1.#INF;
+    Triangle triCam = triangleCameraBuffer[id.z];
+    Triangle triNDC = triangleNDCBuffer[id.z];
 
-    [unroll]
-    for (int n = 0; n < 3; n++)
+    float2 p = ScreenIndexToNDC(id.xy);
+    Barycentric bc = GetTriangleBarycentric(triNDC, p, float3(triCam.vertex[2].z, triCam.vertex[0].z, triCam.vertex[1].z));
+    if (bc.isInside)
     {
-        triCam.vertex[n] = Vec4ToVec3(mul(worldToCamera, float4(tri.vertex[n], 1.0f)));
-        triNDC.vertex[n] = Vec4ToVec3(mul(projectionMatrix, float4(triCam.vertex[n], 1.0f)));
-        triNDC.vertex[n].xy *= -1.0f;
-        boundMin = min(boundMin, float2(triNDC.vertex[n].x, triNDC.vertex[n].y));
-        boundMax = max(boundMax, float2(triNDC.vertex[n].x, triNDC.vertex[n].y));
-    }
+        float depth = dot(bc.bcCoord, float3(triNDC.vertex[2].z, triNDC.vertex[0].z, triNDC.vertex[1].z));
 
-    int2 begin = NDCToScreenIndex(boundMin);
-    int2 end = NDCToScreenIndex(boundMax);
-
-    for (int i = begin.x; i <= end.x; i++)
-    {
-        for (int j = begin.y; j <= end.y; j++)
+        if (depth > ZBuffer[id.xy])
         {
-            float2 p = ScreenIndexToNDC(int2(i, j));
-            Barycentric bc = GetTriangleBarycentric(triNDC, p, float3(triCam.vertex[2].z, triCam.vertex[0].z, triCam.vertex[1].z));
-            if (bc.isInside)
-            {
-                float depth = dot(bc.bcCoord, float3(triNDC.vertex[2].z, triNDC.vertex[0].z, triNDC.vertex[1].z));
-                if (depth < 0.0f)
-                {
-                    continue;
-                }
-                uint depthInt = asuint(depth);
-                uint prevDepthInt;
-                InterlockedMax(ZBuffer[uint2(i, j)], depthInt, prevDepthInt);
-                if (depthInt > prevDepthInt)
-                {
-                    float4 color = float4(float3(PCG3D((uint3) index)) / (float3) 4294967295.0f, 1.0f);
-                    frameBuffer[uint2(i, j)] = color;
-                }
-            }
+            float4 color = float4(float3(PCG3D((uint3) id.z)) / (float3) 4294967295.0f, 1.0f);
+            frameBuffer[id.xy] = color;
+            ZBuffer[id.xy] = depth;
         }
     }
 }

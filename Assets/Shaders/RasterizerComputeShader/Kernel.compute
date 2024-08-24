@@ -1,7 +1,8 @@
 // Kernel.compute
 
-#pragma kernel Render
 #pragma kernel Clear
+#pragma kernel Transform
+#pragma kernel Render
 
 #include "Rasterizer.hlsl"
 
@@ -12,7 +13,14 @@ void Clear(uint3 id : SV_DispatchThreadID)
 }
 
 [numthreads(512,1,1)]
+void Transform(uint3 id : SV_DispatchThreadID)
+{
+    WorldToCameraTransform(id.x);
+    CameraToNDCTransform(id.x);
+}
+
+[numthreads(32,18,1)]
 void Render(uint3 id : SV_DispatchThreadID)
 {
-    RasterizeTriangle(id.x);
+    RasterizeTriangle(id);
 }

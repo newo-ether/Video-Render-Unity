@@ -1334,7 +1334,7 @@ Camera:
   serializedVersion: 2
   m_ClearFlags: 1
   m_BackGroundColor: {r: 0.19215687, g: 0.3019608, b: 0.4745098, a: 0}
-  m_projectionMatrixMode: 2
+  m_projectionMatrixMode: 1
   m_GateFitMode: 2
   m_FOVAxisMode: 0
   m_Iso: 200
@@ -1532,8 +1532,8 @@ MonoBehaviour:
   m_EditorClassIdentifier: 
   displayPlaneShader: {fileID: 4800000, guid: 067d864217100d74793d1664f257b6aa, type: 3}
   rasterizerShader: {fileID: 7200000, guid: 403c336541be12a40a300f87686261fc, type: 3}
-  textureWidth: 640
-  textureHeight: 360
+  textureWidth: 1920
+  textureHeight: 1080
   opacity: 1
 --- !u!114 &1823688471
 MonoBehaviour:
