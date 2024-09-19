@@ -3,20 +3,20 @@
 using System;
 using System.Collections;
 using System.Collections.Generic;
-using System.Runtime.InteropServices;
 using UnityEngine;
 using Unity.Collections;
 using Unity.Collections.LowLevel.Unsafe;
+using Unity.Mathematics;
 
 public class CameraModel : MonoBehaviour
 {
     public struct Triangle
     {
-        public Vector3 v0;
-        public Vector3 v1;
-        public Vector3 v2;
+        public float4 v0;
+        public float4 v1;
+        public float4 v2;
 
-        public Vector3 this[int index]
+        public float4 this[int index]
         {
             get
             {
@@ -67,13 +67,16 @@ public class CameraModel : MonoBehaviour
     private new Renderer renderer;
     private new Camera camera;
 
-    int kernelClear, kernelTransform, kernelRender;
+    private int kernelClear;
+    private int kernelGeometryProcessing;
+    private int kernelRender;
 
     public ComputeShader rasterizerShader;
 
     private ComputeBuffer triangleBuffer;
-    private ComputeBuffer triangleCameraBuffer;
     private ComputeBuffer triangleNDCBuffer;
+    private ComputeBuffer triangleNDCDivWBuffer;
+    private ComputeBuffer triangleBoundBuffer;
 
     public int textureWidth = 1920;
     public int textureHeight = 1080;
@@ -133,9 +136,9 @@ public class CameraModel : MonoBehaviour
             {
                 triangleList.Add(new Triangle
                 {
-                    v0 = transform.TransformPoint(vertices[faces[i]]),
-                    v1 = transform.TransformPoint(vertices[faces[i + 1]]),
-                    v2 = transform.TransformPoint(vertices[faces[i + 2]]),
+                    v0 = new float4(transform.TransformPoint(vertices[faces[i]]), 1.0f),
+                    v1 = new float4(transform.TransformPoint(vertices[faces[i + 1]]), 1.0f),
+                    v2 = new float4(transform.TransformPoint(vertices[faces[i + 2]]), 1.0f),
                 });
             }
         }
@@ -167,29 +170,35 @@ public class CameraModel : MonoBehaviour
         ZBufferTexture = CreateRenderTexture(RenderTextureFormat.RFloat, FilterMode.Point);
 
         // Get Kernels
-        kernelClear = rasterizerShader.FindKernel("Clear");
-        kernelTransform = rasterizerShader.FindKernel("Transform");
-        kernelRender = rasterizerShader.FindKernel("Render");
+        kernelClear = rasterizerShader.FindKernel("KernelClear");
+        kernelGeometryProcessing = rasterizerShader.FindKernel("KernelGeometryProcessing");
+        kernelRender = rasterizerShader.FindKernel("KernelRender");
 
         // Create Compute Buffers
         triangleBuffer = new ComputeBuffer(triangles.Length, UnsafeUtility.SizeOf<Triangle>());
-        triangleCameraBuffer = new ComputeBuffer(triangles.Length, UnsafeUtility.SizeOf<Triangle>());
-        triangleNDCBuffer = new ComputeBuffer(triangles.Length, UnsafeUtility.SizeOf<Triangle>());
-
-        // Setup Basic Variables
-        rasterizerShader.SetInt("textureWidth", textureWidth);
-        rasterizerShader.SetInt("textureHeight", textureHeight);
+        triangleNDCBuffer = new ComputeBuffer(triangles.Length * 2, UnsafeUtility.SizeOf<Triangle>());
+        triangleNDCDivWBuffer = new ComputeBuffer(triangles.Length * 2, UnsafeUtility.SizeOf<Triangle>());
+        triangleBoundBuffer = new ComputeBuffer(triangles.Length * 2, UnsafeUtility.SizeOf<uint4>());
 
         // Setup Triangle Buffer
         triangleBuffer.SetData(triangles);
+        
+        // Setup Basic Variables
+        rasterizerShader.SetInt("textureWidth", textureWidth);
+        rasterizerShader.SetInt("textureHeight", textureHeight);
+        rasterizerShader.SetInt("triangleCount", triangles.Length);
+        rasterizerShader.SetInt("clippedTriangleCount", triangles.Length * 2);
 
-        rasterizerShader.SetBuffer(kernelTransform, "triangleBuffer", triangleBuffer);
-        rasterizerShader.SetBuffer(kernelTransform, "triangleCameraBuffer", triangleCameraBuffer);
-        rasterizerShader.SetBuffer(kernelTransform, "triangleNDCBuffer", triangleNDCBuffer);
+        // Bind Compute Buffers
+        rasterizerShader.SetBuffer(kernelGeometryProcessing, "triangleBuffer", triangleBuffer);
+        rasterizerShader.SetBuffer(kernelGeometryProcessing, "triangleNDCBuffer", triangleNDCBuffer);
+        rasterizerShader.SetBuffer(kernelGeometryProcessing, "triangleNDCDivWBuffer", triangleNDCDivWBuffer);
+        rasterizerShader.SetBuffer(kernelGeometryProcessing, "triangleBoundBuffer", triangleBoundBuffer);
 
         rasterizerShader.SetBuffer(kernelRender, "triangleBuffer", triangleBuffer);
-        rasterizerShader.SetBuffer(kernelRender, "triangleCameraBuffer", triangleCameraBuffer);
         rasterizerShader.SetBuffer(kernelRender, "triangleNDCBuffer", triangleNDCBuffer);
+        rasterizerShader.SetBuffer(kernelRender, "triangleNDCDivWBuffer", triangleNDCDivWBuffer);
+        rasterizerShader.SetBuffer(kernelRender, "triangleBoundBuffer", triangleBoundBuffer);
 
         // Create Display Plane
         displayPlane = GameObject.CreatePrimitive(PrimitiveType.Quad);
@@ -217,32 +226,34 @@ public class CameraModel : MonoBehaviour
         renderer.material.SetFloat("_Opacity", opacity);
 
         // Update Basic Variables
-        rasterizerShader.SetMatrix("worldToCamera", camera.transform.worldToLocalMatrix);
-        rasterizerShader.SetMatrix("projectionMatrix", camera.projectionMatrix);
-
+        float near = camera.nearClipPlane;
+        float far = camera.farClipPlane;
+        float verticalFov = camera.fieldOfView * Mathf.Deg2Rad;
+        float tanHalfVerticalFov = Mathf.Tan(verticalFov / 2.0f);
+        float tanHalfHorizontalFov = tanHalfVerticalFov * camera.aspect;
+        rasterizerShader.SetMatrix("worldToNDC", 
+            new Matrix4x4(
+                new Vector4(1.0f / (tanHalfHorizontalFov), 0.0f, 0.0f, 0.0f),
+                new Vector4(0.0f, 1.0f / (tanHalfVerticalFov), 0.0f, 0.0f),
+                new Vector4(0.0f, 0.0f, far / (far - near), 1.0f),
+                new Vector4(0.0f, 0.0f, -far * near / (far - near), 0.0f))
+            * camera.transform.worldToLocalMatrix);
+        
         // Clear Frame
-        rasterizerShader.Dispatch(kernelClear, textureWidth / 32, textureHeight / 18, 1);
+        rasterizerShader.Dispatch(kernelClear, textureWidth / 30, textureHeight / 30, 1);
 
-        // Execute Transform Shader
-        rasterizerShader.Dispatch(kernelTransform, (int) Mathf.Ceil(triangles.Length / 512.0f), 1, 1);
-
+        // Execute Geometry Processing Shader
+        rasterizerShader.Dispatch(kernelGeometryProcessing, (int) Mathf.Ceil(triangles.Length / 512.0f), 1, 1);
+        
         // Execute Render Shader
-        rasterizerShader.Dispatch(kernelRender, textureWidth / 32, textureHeight / 18, triangles.Length);
+        rasterizerShader.Dispatch(kernelRender, textureWidth / 30, textureHeight / 30, triangles.Length * 2);
     }
 
     private void OnDestroy()
     {
-        if (triangleBuffer != null)
-        {
-            triangleBuffer.Dispose();
-        }
-        if (triangleCameraBuffer != null)
-        {
-            triangleCameraBuffer.Dispose();
-        }
-        if (triangleNDCBuffer != null)
-        {
-            triangleNDCBuffer.Dispose();
-        }
+        triangleBuffer?.Dispose();
+        triangleNDCBuffer?.Dispose();
+        triangleNDCDivWBuffer?.Dispose();
+        triangleBoundBuffer?.Dispose();
     }
 }

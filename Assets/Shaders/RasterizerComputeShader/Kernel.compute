@@ -1,26 +1,37 @@
 // Kernel.compute
 
-#pragma kernel Clear
-#pragma kernel Transform
-#pragma kernel Render
+#pragma kernel KernelClear
+#pragma kernel KernelGeometryProcessing
+#pragma kernel KernelRender
 
 #include "Rasterizer.hlsl"
 
-[numthreads(32,18,1)]
-void Clear(uint3 id : SV_DispatchThreadID)
+[numthreads(30,30,1)]
+void KernelClear(uint3 id : SV_DispatchThreadID)
 {
     ClearPixel(id.xy);
 }
 
 [numthreads(512,1,1)]
-void Transform(uint3 id : SV_DispatchThreadID)
+void KernelGeometryProcessing(uint3 id : SV_DispatchThreadID)
 {
-    WorldToCameraTransform(id.x);
-    CameraToNDCTransform(id.x);
+    if (id.x < GetTriangleCount())
+    {
+        WorldToNDCTransform(id.x);
+        ClearTriangleNDCBuffer(id.x + GetTriangleCount());
+        Clipping(id.x);
+        PerspectiveDivision(id.x);
+        PerspectiveDivision(id.x + GetTriangleCount());
+        CalculateTriangleBound(id.x);
+        CalculateTriangleBound(id.x + GetTriangleCount());
+    }
 }
 
-[numthreads(32,18,1)]
-void Render(uint3 id : SV_DispatchThreadID)
+[numthreads(30,30,1)]
+void KernelRender(uint3 id : SV_DispatchThreadID)
 {
-    RasterizeTriangle(id);
+    if (id.z < GetClippedTriangleCount() && !IsEmptyTriangle(id.z))
+    {
+        RasterizeTriangle(id);
+    }
 }

@@ -3,7 +3,10 @@ guid: a451fcf81a2104149b80d4aebcc5784e
 MonoImporter:
   externalObjects: {}
   serializedVersion: 2
-  defaultReferences: []
+  defaultReferences:
+  - displayPlaneShader: {fileID: 4800000, guid: 067d864217100d74793d1664f257b6aa,
+      type: 3}
+  - rasterizerShader: {fileID: 7200000, guid: 403c336541be12a40a300f87686261fc, type: 3}
   executionOrder: 300
   icon: {instanceID: 0}
   userData: 
