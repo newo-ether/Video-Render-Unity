@@ -13,6 +13,6 @@ public class LightController : MonoBehaviour
 
     void Update()
     {
-        transform.position = new Vector3(4.0f * Mathf.Cos(Time.time * 2.0f), 8.0f, 4.0f * Mathf.Sin(Time.time * 2.0f));
+        transform.position = new Vector3(4.0f * Mathf.Cos(Time.frameCount / 60.0f * 2.0f), 8.0f, 4.0f * Mathf.Sin(Time.frameCount / 60.0f * 2.0f));
     }
 }

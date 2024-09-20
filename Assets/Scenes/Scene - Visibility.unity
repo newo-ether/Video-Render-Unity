@@ -149,7 +149,7 @@ MonoBehaviour:
   m_PrefabInstance: {fileID: 0}
   m_PrefabAsset: {fileID: 0}
   m_GameObject: {fileID: 70529241}
-  m_Enabled: 0
+  m_Enabled: 1
   m_EditorHideFlags: 0
   m_Script: {fileID: 11500000, guid: a33370014af3a6546bf9fe14101e476e, type: 3}
   m_Name: 
@@ -1580,9 +1580,11 @@ MonoBehaviour:
   m_Name: 
   m_EditorClassIdentifier: 
   displayPlaneShader: {fileID: 4800000, guid: 067d864217100d74793d1664f257b6aa, type: 3}
+  mode: 0
   rasterizerShader: {fileID: 7200000, guid: 403c336541be12a40a300f87686261fc, type: 3}
-  textureWidth: 480
-  textureHeight: 270
+  rayCastingShader: {fileID: 7200000, guid: 0642710538b242448aac640f28b9c7de, type: 3}
+  textureWidth: 180
+  textureHeight: 90
   opacity: 1
 --- !u!114 &1823688471
 MonoBehaviour:

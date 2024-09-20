@@ -59,6 +59,19 @@ public class CameraModel : MonoBehaviour
             }
         }
     }
+    
+    struct RayCastingCamera
+    {
+        public float3 pos;
+
+        public float3 look;
+        public float3 up;
+        public float3 right;
+
+        public float3 screenLowerLeftCorner;
+        public float screenPlaneWidth;
+        public float screenPlaneHeight;
+    };
 
     private GameObject displayPlane;
     public Shader displayPlaneShader;
@@ -66,17 +79,24 @@ public class CameraModel : MonoBehaviour
     private RenderTexture ZBufferTexture;
     private new Renderer renderer;
     private new Camera camera;
+    
+    private RayCastingCamera rayCastingCamera;
 
     private int kernelClear;
     private int kernelGeometryProcessing;
-    private int kernelRender;
+    private int kernelRasterizer;
+    private int kernelRayCasting;
+
+    public bool mode = false;
 
     public ComputeShader rasterizerShader;
+    public ComputeShader rayCastingShader;
 
     private ComputeBuffer triangleBuffer;
     private ComputeBuffer triangleNDCBuffer;
     private ComputeBuffer triangleNDCDivWBuffer;
     private ComputeBuffer triangleBoundBuffer;
+    private ComputeBuffer cameraBuffer;
 
     public int textureWidth = 1920;
     public int textureHeight = 1080;
@@ -98,6 +118,34 @@ public class CameraModel : MonoBehaviour
 
         displayPlane.transform.SetLocalPositionAndRotation(matrix.GetPosition(), matrix.rotation);
         displayPlane.transform.localScale = new Vector3(nearWidth, nearHeight, 1.0f);
+    }
+
+    private void UpdateRayCastingCamera()
+    {
+        float aspect = camera.aspect;
+
+        Vector3 pos = camera.transform.position;
+
+        Vector3 look = camera.transform.forward;
+        Vector3 up = camera.transform.up;
+        Vector3 right = camera.transform.right;
+
+        float fovVertical = camera.fieldOfView;
+
+        Vector3 screenPlaneOrigin = pos + look * camera.nearClipPlane;
+        float screenPlaneHeight = 2.0f * Mathf.Tan(fovVertical * 0.5f * Mathf.Deg2Rad) * camera.nearClipPlane;
+        float screenPlaneWidth = screenPlaneHeight * aspect;
+        Vector3 screenLowerLeftCorner = screenPlaneOrigin
+                                        - 0.5f * screenPlaneWidth * right
+                                        - 0.5f * screenPlaneHeight * up;
+        
+        rayCastingCamera.pos = pos;
+        rayCastingCamera.look = look;
+        rayCastingCamera.up = up;
+        rayCastingCamera.right = right;
+        rayCastingCamera.screenLowerLeftCorner = screenLowerLeftCorner;
+        rayCastingCamera.screenPlaneWidth = screenPlaneWidth;
+        rayCastingCamera.screenPlaneHeight = screenPlaneHeight;
     }
 
     private GameObject[] GetAllGameObjects()
@@ -157,31 +205,17 @@ public class CameraModel : MonoBehaviour
         return texture;
     }
 
-    private void Start()
+    private void InitRasterizer()
     {
-        // Get Camera
-        camera = GetComponent<Camera>();
-
-        // Get All Triangles
-        triangles = GetAllTriangles();
-
-        // Create Render Textures
-        renderTexture = CreateRenderTexture(RenderTextureFormat.ARGBFloat, FilterMode.Point);
-        ZBufferTexture = CreateRenderTexture(RenderTextureFormat.RFloat, FilterMode.Point);
-
         // Get Kernels
         kernelClear = rasterizerShader.FindKernel("KernelClear");
         kernelGeometryProcessing = rasterizerShader.FindKernel("KernelGeometryProcessing");
-        kernelRender = rasterizerShader.FindKernel("KernelRender");
+        kernelRasterizer = rasterizerShader.FindKernel("KernelRender");
 
         // Create Compute Buffers
-        triangleBuffer = new ComputeBuffer(triangles.Length, UnsafeUtility.SizeOf<Triangle>());
         triangleNDCBuffer = new ComputeBuffer(triangles.Length * 2, UnsafeUtility.SizeOf<Triangle>());
         triangleNDCDivWBuffer = new ComputeBuffer(triangles.Length * 2, UnsafeUtility.SizeOf<Triangle>());
         triangleBoundBuffer = new ComputeBuffer(triangles.Length * 2, UnsafeUtility.SizeOf<uint4>());
-
-        // Setup Triangle Buffer
-        triangleBuffer.SetData(triangles);
         
         // Setup Basic Variables
         rasterizerShader.SetInt("textureWidth", textureWidth);
@@ -195,19 +229,62 @@ public class CameraModel : MonoBehaviour
         rasterizerShader.SetBuffer(kernelGeometryProcessing, "triangleNDCDivWBuffer", triangleNDCDivWBuffer);
         rasterizerShader.SetBuffer(kernelGeometryProcessing, "triangleBoundBuffer", triangleBoundBuffer);
 
-        rasterizerShader.SetBuffer(kernelRender, "triangleBuffer", triangleBuffer);
-        rasterizerShader.SetBuffer(kernelRender, "triangleNDCBuffer", triangleNDCBuffer);
-        rasterizerShader.SetBuffer(kernelRender, "triangleNDCDivWBuffer", triangleNDCDivWBuffer);
-        rasterizerShader.SetBuffer(kernelRender, "triangleBoundBuffer", triangleBoundBuffer);
-
-        // Create Display Plane
-        displayPlane = GameObject.CreatePrimitive(PrimitiveType.Quad);
-
+        rasterizerShader.SetBuffer(kernelRasterizer, "triangleBuffer", triangleBuffer);
+        rasterizerShader.SetBuffer(kernelRasterizer, "triangleNDCBuffer", triangleNDCBuffer);
+        rasterizerShader.SetBuffer(kernelRasterizer, "triangleNDCDivWBuffer", triangleNDCDivWBuffer);
+        rasterizerShader.SetBuffer(kernelRasterizer, "triangleBoundBuffer", triangleBoundBuffer);
+        
         // Bind Render Texture to Compute Shader
         rasterizerShader.SetTexture(kernelClear, "frameBuffer", renderTexture);
         rasterizerShader.SetTexture(kernelClear, "ZBuffer", ZBufferTexture);
-        rasterizerShader.SetTexture(kernelRender, "frameBuffer", renderTexture);
-        rasterizerShader.SetTexture(kernelRender, "ZBuffer", ZBufferTexture);
+        rasterizerShader.SetTexture(kernelRasterizer, "frameBuffer", renderTexture);
+        rasterizerShader.SetTexture(kernelRasterizer, "ZBuffer", ZBufferTexture);
+    }
+    
+    private void InitRayCasting()
+    {
+        // Get Kernels
+        kernelRayCasting = rayCastingShader.FindKernel("KernelRender");
+
+        // Create Compute Buffers
+        cameraBuffer = new ComputeBuffer(1, UnsafeUtility.SizeOf<RayCastingCamera>());
+
+        // Setup Basic Variables
+        rayCastingShader.SetInt("renderWidth", textureWidth);
+        rayCastingShader.SetInt("renderHeight", textureHeight);
+        rayCastingShader.SetInt("triangleCount", triangles.Length);
+
+        // Bind Compute Buffers
+        rayCastingShader.SetBuffer(kernelRayCasting, "triangleBuffer", triangleBuffer);
+        rayCastingShader.SetBuffer(kernelRayCasting, "cameraBuffer", cameraBuffer);
+        
+        // Bind Render Texture to Compute Shader
+        rayCastingShader.SetTexture(kernelRayCasting, "renderResult", renderTexture);
+    }
+
+    private void Start()
+    {
+        // Get Camera
+        camera = GetComponent<Camera>();
+
+        // Get All Triangles
+        triangles = GetAllTriangles();
+        
+        // Create Triangle Buffer
+        triangleBuffer = new ComputeBuffer(triangles.Length, UnsafeUtility.SizeOf<Triangle>());
+        
+        // Setup Triangle Buffer
+        triangleBuffer.SetData(triangles);
+
+        // Create Render Textures
+        renderTexture = CreateRenderTexture(RenderTextureFormat.ARGBFloat, FilterMode.Point);
+        ZBufferTexture = CreateRenderTexture(RenderTextureFormat.RFloat, FilterMode.Point);
+        
+        InitRasterizer();
+        InitRayCasting();
+
+        // Create Display Plane
+        displayPlane = GameObject.CreatePrimitive(PrimitiveType.Quad);
 
         // Bind Render Texture to Display Plane
         renderer = displayPlane.GetComponent<MeshRenderer>();
@@ -225,6 +302,19 @@ public class CameraModel : MonoBehaviour
         // Update Opacity
         renderer.material.SetFloat("_Opacity", opacity);
 
+        // Execute Shader
+        if (mode)
+        {
+            ExecuteRasterizer();
+        }
+        else
+        {
+            ExecuteRayCasting();
+        }
+    }
+
+    private void ExecuteRasterizer()
+    {
         // Update Basic Variables
         float near = camera.nearClipPlane;
         float far = camera.farClipPlane;
@@ -246,7 +336,14 @@ public class CameraModel : MonoBehaviour
         rasterizerShader.Dispatch(kernelGeometryProcessing, (int) Mathf.Ceil(triangles.Length / 512.0f), 1, 1);
         
         // Execute Render Shader
-        rasterizerShader.Dispatch(kernelRender, textureWidth / 30, textureHeight / 30, triangles.Length * 2);
+        rasterizerShader.Dispatch(kernelRasterizer, textureWidth / 30, textureHeight / 30, triangles.Length * 2);
+    }
+
+    private void ExecuteRayCasting()
+    {
+        UpdateRayCastingCamera();
+        cameraBuffer.SetData(new RayCastingCamera[] { rayCastingCamera });
+        rayCastingShader.Dispatch(kernelRayCasting, textureWidth / 30, textureHeight / 30, 1);
     }
 
     private void OnDestroy()
@@ -255,5 +352,6 @@ public class CameraModel : MonoBehaviour
         triangleNDCBuffer?.Dispose();
         triangleNDCDivWBuffer?.Dispose();
         triangleBoundBuffer?.Dispose();
+        cameraBuffer?.Dispose();
     }
 }

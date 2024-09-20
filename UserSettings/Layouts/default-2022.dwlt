@@ -19,7 +19,7 @@ MonoBehaviour:
     width: 1920
     height: 989
   m_ShowMode: 4
-  m_Title: Scene
+  m_Title: Hierarchy
   m_RootView: {fileID: 2}
   m_MinSize: {x: 875, y: 371}
   m_MaxSize: {x: 10000, y: 10000}
@@ -494,7 +494,7 @@ MonoBehaviour:
   m_UseMipMap: 0
   m_VSyncEnabled: 0
   m_Gizmos: 0
-  m_Stats: 0
+  m_Stats: 1
   m_SelectedSizes: 07000000000000000000000000000000000000000000000000000000000000000000000000000000
   m_ZoomArea:
     m_HRangeLocked: 0
@@ -587,18 +587,18 @@ MonoBehaviour:
       m_ExpandedIDs: 0afbffff
       m_RenameOverlay:
         m_UserAcceptedRename: 0
-        m_Name: 
-        m_OriginalName: 
+        m_Name: Sky and Fog Volume
+        m_OriginalName: Sky and Fog Volume
         m_EditFieldRect:
           serializedVersion: 2
           x: 0
           y: 0
           width: 0
           height: 0
-        m_UserData: 0
+        m_UserData: 31704
         m_IsWaitingForDelay: 0
         m_IsRenaming: 0
-        m_OriginalEventType: 11
+        m_OriginalEventType: 0
         m_IsRenamingFilename: 0
         m_ClientGUIView: {fileID: 7}
       m_SearchString: 
@@ -654,7 +654,7 @@ MonoBehaviour:
     m_SkipHidden: 0
     m_SearchArea: 1
     m_Folders:
-    - Assets/Shaders/RasterizerComputeShader
+    - Assets/Shaders/RayCastingComputeShader
     m_Globs: []
     m_OriginalText: 
     m_ImportLogFlags: 0
@@ -662,15 +662,15 @@ MonoBehaviour:
   m_ViewMode: 1
   m_StartGridSize: 16
   m_LastFolders:
-  - Assets/Shaders/RasterizerComputeShader
+  - Assets/Shaders/RayCastingComputeShader
   m_LastFoldersGridSize: 16
   m_LastProjectPath: D:\workspace\Projects\Unity Projects\Video-Render-Unity
   m_LockTracker:
     m_IsLocked: 0
   m_FolderTreeState:
     scrollPos: {x: 0, y: 0}
-    m_SelectedIDs: ec7d0000
-    m_LastClickedID: 32236
+    m_SelectedIDs: 0e9e0000
+    m_LastClickedID: 40462
     m_ExpandedIDs: 000000009a7c00009c7c00009e7c000000ca9a3b
     m_RenameOverlay:
       m_UserAcceptedRename: 0
@@ -730,18 +730,18 @@ MonoBehaviour:
     m_ExpandedInstanceIDs: e6600000e8600000baa50000986e0000b26e000078880000eec3000006c400004087000000000000347b0000b67b0000
     m_RenameOverlay:
       m_UserAcceptedRename: 0
-      m_Name: Rasterizer
-      m_OriginalName: Rasterizer
+      m_Name: 
+      m_OriginalName: 
       m_EditFieldRect:
         serializedVersion: 2
         x: 0
         y: 0
         width: 0
         height: 0
-      m_UserData: 32240
+      m_UserData: 0
       m_IsWaitingForDelay: 0
       m_IsRenaming: 0
-      m_OriginalEventType: 0
+      m_OriginalEventType: 11
       m_IsRenamingFilename: 1
       m_ClientGUIView: {fileID: 8}
     m_CreateAssetUtility:
@@ -1151,9 +1151,9 @@ MonoBehaviour:
   m_PlayAudio: 0
   m_AudioPlay: 0
   m_Position:
-    m_Target: {x: -37.038876, y: -19.535599, z: -58.308826}
+    m_Target: {x: -40.160194, y: -17.732233, z: -57.111496}
     speed: 2
-    m_Value: {x: -37.038876, y: -19.535599, z: -58.308826}
+    m_Value: {x: -40.160194, y: -17.732233, z: -57.111496}
   m_RenderMode: 0
   m_CameraMode:
     drawMode: 0
@@ -1199,13 +1199,13 @@ MonoBehaviour:
     m_GridAxis: 1
     m_gridOpacity: 0.5
   m_Rotation:
-    m_Target: {x: 0.03972883, y: -0.949742, z: 0.13452676, w: 0.28021747}
+    m_Target: {x: 0.038313393, y: -0.9458183, z: 0.12096792, w: 0.29922694}
     speed: 2
-    m_Value: {x: 0.03972471, y: -0.94964355, z: 0.13451281, w: 0.2801884}
+    m_Value: {x: 0.03830937, y: -0.945719, z: 0.120955214, w: 0.29919553}
   m_Size:
-    m_Target: 44.45492
+    m_Target: 46.455395
     speed: 2
-    m_Value: 44.45492
+    m_Value: 46.455395
   m_Ortho:
     m_Target: 0
     speed: 2
