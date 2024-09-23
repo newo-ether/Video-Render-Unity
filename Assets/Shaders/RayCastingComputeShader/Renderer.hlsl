@@ -6,33 +6,32 @@
 #include "Ray.hlsl"
 #include "Scene.hlsl"
 #include "IntersectInfo.hlsl"
+#include "Film.hlsl"
 
-#define UINTMAX 4294967295u
-
-uint3 PCG3D(uint3 v)
+float3 Rand(int index)
 {
-    v = v * 1664525u + 1013904223u;
-    v.x += v.y * v.z;
-    v.y += v.z * v.x;
-    v.z += v.x * v.y;
-    v ^= v >> 16;
-    v.x += v.y * v.z;
-    v.y += v.z * v.x;
-    v.z += v.x * v.y;
-    return v;
+    float floatIndex = (float) index;
+    return float3(
+        frac(sqrt(234.928f * floatIndex + 12.532f)),
+        frac(sqrt(533.425f * floatIndex + 43.913f)),
+        frac(sqrt(732.563f * floatIndex + 69.729f)));
 }
 
-float3 RayCasting(Ray ray, uint2 screenIndex)
+void RayCasting(Ray ray, uint2 screenIndex)
 {
     IntersectInfo isect = SceneIntersect(ray);
 
     if (isect.isHit)
     {
-        return (float3) PCG3D((uint3) isect.triangleIndex) / (float3) UINTMAX;
+        float4 color = float4(Rand(isect.triangleIndex), 1.0f);
+        SetFilmPixel(screenIndex, color);
+        SetDepthPixel(screenIndex, isect.tHit);
     }
     else
     {
-        return (float3) 0.0f;
+        float4 color = float4((float3) 0.0f, 1.0f);
+        SetFilmPixel(screenIndex, color);
+        SetDepthPixel(screenIndex, 1000.0f);
     }
 }
 

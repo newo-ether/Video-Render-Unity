@@ -4,9 +4,6 @@
 #define __RASTERIZER__
 
 #define INF 1.#INF
-#define INTMAX 2147483647
-#define INTMIN -2147483648
-#define UINTMAX 4294967295u
 
 struct Triangle
 {
@@ -23,7 +20,7 @@ struct Barycentric
 RWTexture2D<float4> frameBuffer;
 
 // Uniform Variable
-RWTexture2D<float> ZBuffer;
+RWTexture2D<float4> ZBuffer;
 
 // Uniform Variable
 StructuredBuffer<Triangle> triangleBuffer;
@@ -52,17 +49,19 @@ int textureWidth;
 // Uniform Variable
 int textureHeight;
 
-uint3 PCG3D(uint3 v)
+// Uniform Variable
+float triangleAppear;
+
+// Uniform Variable
+bool disableZBuffer;
+
+float3 Rand(int index)
 {
-    v = v * 1664525u + 1013904223u;
-    v.x += v.y * v.z;
-    v.y += v.z * v.x;
-    v.z += v.x * v.y;
-    v ^= v >> 16;
-    v.x += v.y * v.z;
-    v.y += v.z * v.x;
-    v.z += v.x * v.y;
-    return v;
+    float floatIndex = (float) index;
+    return float3(
+        frac(sqrt(234.928f * floatIndex + 12.532f)),
+        frac(sqrt(533.425f * floatIndex + 43.913f)),
+        frac(sqrt(732.563f * floatIndex + 69.729f)));
 }
 
 float4 VectorDivW(float4 v)
@@ -342,7 +341,8 @@ void RasterizeTriangle(uint3 id)
 {
     uint4 bound = triangleBoundBuffer[id.z];
 
-    if ((id.x >= bound.x && id.y >= bound.y) && (id.x <= bound.z && id.y <= bound.w))
+    if ((id.x >= bound.x && id.y >= bound.y) && (id.x <= bound.z && id.y <= bound.w) &&
+        (float) (id.y * (bound.w - bound.y) + (id.x - bound.x)) / (textureWidth * textureHeight - 1) < triangleAppear)
     {
         Triangle triNDC = triangleNDCBuffer[id.z];
         Triangle triNDCDivW = triangleNDCDivWBuffer[id.z];
@@ -355,11 +355,19 @@ void RasterizeTriangle(uint3 id)
             float w = dot(bc.bcCoord, float3(triNDC.vertex[2].w, triNDC.vertex[0].w, triNDC.vertex[1].w));
             depth /= w;
 
-            if (depth < ZBuffer[id.xy])
+            if (!disableZBuffer)
             {
-                float4 color = float4(float3(PCG3D((uint3) (id.z > triangleCount ? id.z - triangleCount : id.z))) / (float3) UINTMAX, 1.0f);
+                if (depth < ZBuffer[id.xy].r)
+                {
+                    float4 color = float4(Rand(id.z > triangleCount ? id.z - triangleCount : id.z), 1.0f);
+                    frameBuffer[id.xy] = color;
+                    ZBuffer[id.xy] = float4((float3) depth, 1.0f);
+                }
+            }
+            else
+            {
+                float4 color = float4(Rand(id.z > triangleCount ? id.z - triangleCount : id.z), 1.0f);
                 frameBuffer[id.xy] = color;
-                ZBuffer[id.xy] = depth;
             }
         }
     }
@@ -368,7 +376,7 @@ void RasterizeTriangle(uint3 id)
 void ClearPixel(uint2 index)
 {
     frameBuffer[index] = float4(0.0f, 0.0f, 0.0f, 1.0f);
-    ZBuffer[index] = 1.0f;
+    ZBuffer[index] = float4(1.0f, 1.0f, 1.0f, 1.0f);
 }
 
 #endif // __RASTERIZER__

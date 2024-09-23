@@ -4,7 +4,8 @@
 #define __FILM__
 
 // Uniform Variable
-RWTexture2D<float4> renderResult;
+RWTexture2D<float4> frameBuffer;
+RWTexture2D<float4> depthBuffer;
 
 // Uniform Variable
 uint renderWidth;
@@ -29,7 +30,12 @@ uint2 GetFilmGeometry()
 
 void SetFilmPixel(uint2 index, float4 value)
 {
-    renderResult[index] = value;
+    frameBuffer[index] = value;
+}
+
+void SetDepthPixel(uint2 index, float value)
+{
+    depthBuffer[index] = float4((float3) value, 1.0f);
 }
 
 #endif // __FILM__

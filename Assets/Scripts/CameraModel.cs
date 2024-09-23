@@ -7,6 +7,9 @@ using UnityEngine;
 using Unity.Collections;
 using Unity.Collections.LowLevel.Unsafe;
 using Unity.Mathematics;
+using Unity.VisualScripting;
+using UnityEngine.UI;
+using TMPro;
 
 public class CameraModel : MonoBehaviour
 {
@@ -60,7 +63,7 @@ public class CameraModel : MonoBehaviour
         }
     }
     
-    struct RayCastingCamera
+    public struct RayCastingCamera
     {
         public float3 pos;
 
@@ -74,10 +77,85 @@ public class CameraModel : MonoBehaviour
     };
 
     private GameObject displayPlane;
-    public Shader displayPlaneShader;
+    private GameObject ZBufferPlane;
+    private GameObject topLine;
+    private GameObject bottomLine;
+    private GameObject leftLine;
+    private GameObject rightLine;
+    private GameObject topLeftLine;
+    private GameObject topRightLine;
+    private GameObject bottomLeftLine;
+    private GameObject bottomRightLine;
+
+    private GameObject oneRay;
+    private GameObject[] allRays;
+    
+    private GameObject[] oneTriangleRay;
+    private GameObject[] allTriangleRays;
+
+    private GameObject[] ZBufferTexts;
+
+    [Range(0.0f, 0.1f)]
+    public float wireframeWidth = 0.02f;
+    [Range(0.0f, 0.1f)]
+    public float rayWidth = 0.02f;
+    [Range(0.0f, 0.5f)]
+    public float borderWidth = 0.1f;
+
+    public float wireframeOffset = 0.1f;
+    public Color gridColor = new Color(0.0f, 1.0f, 0.0f, 1.0f);
+    [Range(0.0f, 100.0f)]
+    public float gridEmission = 20.0f;
+    [Range(0.0f, 100.0f)]
+    public float screenEmission = 5.0f;
+    public float displayPlaneAppearScreen = 0.0f;
+    public float displayPlaneAppearGrid = 0.0f;
+    public bool disableZBuffer = false;
+    public float ZBufferPlaneAppearScreen = 0.0f;
+    public float ZBufferPlaneAppearGrid = 0.0f;
+    public float ZBufferPlaneYMovement = 0.0f;
+    public float ZBufferToneMapping = 5.0f;
+    public Shader ZBufferTextShader;
+    public TMP_FontAsset ZBufferTextFont;
+    [Range(0.0f, 0.005f)]
+    public float ZBufferTextSize = 0.005f;
+    [Range(0.0f, 10.0f)]
+    public float appearTransitionWidth = 1.0f;
+    [Range(0.0f, 10.0f)]
+    public float appearTransitionSmoothness = 1.0f;
+
+    public int oneRayIndex = 0;
+    [Range(0.0f, 1.0f)]
+    public float oneRayAppear = 0.0f;
+    
+    [Range(0.0f, 1.0f)]
+    public float allRaysAppear = 0.0f;
+
+    public int oneTriangleRayIndex = 0;
+    [Range(0.0f, 1.0f)]
+    public float oneTriangleRayAppear = 0.0f;
+    
+    [Range(0.0f, 1.0f)]
+    public float allTriangleRaysAppear = 0.0f;
+
+    public int pixelClampMin = 0;
+    public int pixelClampMax = 0;
+
+    public int triangleClampMin = 0;
+    public int triangleClampMax = 0;
+    [Range(0.0f, 1.0f)]
+    public float triangleAppear = 0.0f;
+
+    private Texture2D ZBufferTexture2D;
+    
+    public Material displayPlaneMaterial;
+    public Material ZBufferPlaneMaterial;
+    public Material wireframeMaterial;
+    public Material rayMaterial;
     private RenderTexture renderTexture;
     private RenderTexture ZBufferTexture;
-    private new Renderer renderer;
+    private Renderer displayPlaneMeshRenderer;
+    private Renderer ZBufferPlaneMeshRenderer;
     private new Camera camera;
     
     private RayCastingCamera rayCastingCamera;
@@ -87,7 +165,13 @@ public class CameraModel : MonoBehaviour
     private int kernelRasterizer;
     private int kernelRayCasting;
 
-    public bool mode = false;
+    public Mode mode;
+
+    public enum Mode
+    {
+        RayCasting = 0,
+        Rasterizer = 1
+    }
 
     public ComputeShader rasterizerShader;
     public ComputeShader rayCastingShader;
@@ -102,25 +186,13 @@ public class CameraModel : MonoBehaviour
     public int textureHeight = 1080;
 
     [Range(0.0f, 1.0f)]
-    public float opacity = 1.0f;
+    public float displayPlaneOpacity = 1.0f;
+    [Range(0.0f, 1.0f)]
+    public float ZBufferPlaneOpacity = 1.0f;
 
     private Triangle[] triangles;
 
-    private void UpdateDisplayPlane()
-    {
-        float aspect = GetComponent<Camera>().aspect;
-        float fov = GetComponent<Camera>().fieldOfView;
-        float near = GetComponent<Camera>().nearClipPlane * 1.001f;
-        float nearHeight = near * Mathf.Tan((fov * 0.5f) * Mathf.Deg2Rad) * 2.0f;
-        float nearWidth = nearHeight * aspect;
-        Matrix4x4 matrix = GetComponent<Camera>().transform.localToWorldMatrix
-                           * Matrix4x4.Translate(new Vector3(0.0f, 0.0f, near));
-
-        displayPlane.transform.SetLocalPositionAndRotation(matrix.GetPosition(), matrix.rotation);
-        displayPlane.transform.localScale = new Vector3(nearWidth, nearHeight, 1.0f);
-    }
-
-    private void UpdateRayCastingCamera()
+    private void UpdateCamera()
     {
         float aspect = camera.aspect;
 
@@ -135,10 +207,112 @@ public class CameraModel : MonoBehaviour
         Vector3 screenPlaneOrigin = pos + look * camera.nearClipPlane;
         float screenPlaneHeight = 2.0f * Mathf.Tan(fovVertical * 0.5f * Mathf.Deg2Rad) * camera.nearClipPlane;
         float screenPlaneWidth = screenPlaneHeight * aspect;
+
+        float offsetScreenPlaneWidth = screenPlaneWidth + 2.0f * wireframeOffset;
+        float offsetScreenPlaneHeight = screenPlaneHeight + 2.0f * wireframeOffset / camera.aspect;
+
+        Vector3 screenTopLeftCorner = screenPlaneOrigin
+                                      - 0.5f * screenPlaneWidth * right
+                                      + 0.5f * screenPlaneHeight * up;
+
         Vector3 screenLowerLeftCorner = screenPlaneOrigin
                                         - 0.5f * screenPlaneWidth * right
                                         - 0.5f * screenPlaneHeight * up;
+
+        Vector3 screenTopRightCorner = screenPlaneOrigin
+                                       + 0.5f * screenPlaneWidth * right
+                                       + 0.5f * screenPlaneHeight * up;
+
+        Vector3 screenLowerRightCorner = screenPlaneOrigin
+                                         + 0.5f * screenPlaneWidth * right
+                                         - 0.5f * screenPlaneHeight * up;
+
+        Vector3 offsetScreenTopLeftCorner = screenPlaneOrigin
+                                            - 0.5f * offsetScreenPlaneWidth * right
+                                            + 0.5f * offsetScreenPlaneHeight * up;
+
+        Vector3 offsetScreenLowerLeftCorner = screenPlaneOrigin
+                                              - 0.5f * offsetScreenPlaneWidth * right
+                                              - 0.5f * offsetScreenPlaneHeight * up;
+
+        Vector3 offsetScreenTopRightCorner = screenPlaneOrigin
+                                             + 0.5f * offsetScreenPlaneWidth * right
+                                             + 0.5f * offsetScreenPlaneHeight * up;
+
+        Vector3 offsetScreenLowerRightCorner = screenPlaneOrigin
+                                               + 0.5f * offsetScreenPlaneWidth * right
+                                               - 0.5f * offsetScreenPlaneHeight * up;
+
+        // Update Display Plane
+        Matrix4x4 matrix = camera.transform.localToWorldMatrix
+                           * Matrix4x4.Translate(new Vector3(0.0f, 0.0f, camera.nearClipPlane * 1.001f));
+
+        displayPlane.transform.SetLocalPositionAndRotation(matrix.GetPosition(), matrix.rotation);
+        displayPlane.transform.localScale = new Vector3(screenPlaneWidth, screenPlaneHeight, 1.0f);
         
+        // Update Z-Buffer Plane
+        matrix = camera.transform.localToWorldMatrix
+                 * Matrix4x4.Translate(new Vector3(0.0f, ZBufferPlaneYMovement, camera.nearClipPlane * 1.005f));
+
+        ZBufferPlane.transform.SetLocalPositionAndRotation(matrix.GetPosition(), matrix.rotation);
+        ZBufferPlane.transform.localScale = new Vector3(screenPlaneWidth, screenPlaneHeight, 1.0f);
+
+        // Update Camera Wireframe
+        matrix = camera.transform.localToWorldMatrix
+                 * Matrix4x4.Translate(new Vector3(0.0f, offsetScreenPlaneHeight * 0.5f, camera.nearClipPlane))
+                 * Matrix4x4.Rotate(Quaternion.AngleAxis(90.0f, Vector3.forward));
+
+        topLine.transform.SetLocalPositionAndRotation(matrix.GetPosition(), matrix.rotation);
+        topLine.transform.localScale = new Vector3(wireframeWidth, 0.5f * offsetScreenPlaneWidth, wireframeWidth);
+
+        matrix = camera.transform.localToWorldMatrix
+                 * Matrix4x4.Translate(new Vector3(0.0f, -offsetScreenPlaneHeight * 0.5f, camera.nearClipPlane))
+                 * Matrix4x4.Rotate(Quaternion.AngleAxis(90.0f, Vector3.forward));
+
+        bottomLine.transform.SetLocalPositionAndRotation(matrix.GetPosition(), matrix.rotation);
+        bottomLine.transform.localScale = new Vector3(wireframeWidth, 0.5f * offsetScreenPlaneWidth, wireframeWidth);
+
+        matrix = camera.transform.localToWorldMatrix
+                 * Matrix4x4.Translate(new Vector3(-0.5f * offsetScreenPlaneWidth, 0.0f, camera.nearClipPlane));
+
+        leftLine.transform.SetLocalPositionAndRotation(matrix.GetPosition(), matrix.rotation);
+        leftLine.transform.localScale = new Vector3(wireframeWidth, 0.5f * offsetScreenPlaneHeight, wireframeWidth);
+
+        matrix = camera.transform.localToWorldMatrix
+                 * Matrix4x4.Translate(new Vector3(0.5f * offsetScreenPlaneWidth, 0.0f, camera.nearClipPlane));
+
+        rightLine.transform.SetLocalPositionAndRotation(matrix.GetPosition(), matrix.rotation);
+        rightLine.transform.localScale = new Vector3(wireframeWidth, 0.5f * offsetScreenPlaneHeight, wireframeWidth);
+
+        matrix = Matrix4x4.Translate(0.5f * (offsetScreenTopLeftCorner + pos))
+                 * Matrix4x4.Rotate(Quaternion.FromToRotation(Vector3.up, pos - offsetScreenTopLeftCorner));
+
+        topLeftLine.transform.SetLocalPositionAndRotation(matrix.GetPosition(), matrix.rotation);
+        topLeftLine.transform.localScale = new Vector3(wireframeWidth,
+            0.5f * Vector3.Magnitude(pos - offsetScreenTopLeftCorner), wireframeWidth);
+
+        matrix = Matrix4x4.Translate(0.5f * (offsetScreenTopRightCorner + pos))
+                 * Matrix4x4.Rotate(Quaternion.FromToRotation(Vector3.up, pos - offsetScreenTopRightCorner));
+
+        topRightLine.transform.SetLocalPositionAndRotation(matrix.GetPosition(), matrix.rotation);
+        topRightLine.transform.localScale = new Vector3(wireframeWidth,
+            0.5f * Vector3.Magnitude(pos - offsetScreenTopRightCorner), wireframeWidth);
+
+        matrix = Matrix4x4.Translate(0.5f * (offsetScreenLowerLeftCorner + pos))
+                 * Matrix4x4.Rotate(Quaternion.FromToRotation(Vector3.up, pos - offsetScreenLowerLeftCorner));
+
+        bottomLeftLine.transform.SetLocalPositionAndRotation(matrix.GetPosition(), matrix.rotation);
+        bottomLeftLine.transform.localScale = new Vector3(wireframeWidth,
+            0.5f * Vector3.Magnitude(pos - offsetScreenLowerLeftCorner), wireframeWidth);
+
+        matrix = Matrix4x4.Translate(0.5f * (offsetScreenLowerRightCorner + pos))
+                 * Matrix4x4.Rotate(Quaternion.FromToRotation(Vector3.up, pos - offsetScreenLowerRightCorner));
+
+        bottomRightLine.transform.SetLocalPositionAndRotation(matrix.GetPosition(), matrix.rotation);
+        bottomRightLine.transform.localScale = new Vector3(wireframeWidth,
+            0.5f * Vector3.Magnitude(pos - offsetScreenLowerRightCorner), wireframeWidth);
+
+        // Update Ray Casting Camera Data
         rayCastingCamera.pos = pos;
         rayCastingCamera.look = look;
         rayCastingCamera.up = up;
@@ -146,6 +320,153 @@ public class CameraModel : MonoBehaviour
         rayCastingCamera.screenLowerLeftCorner = screenLowerLeftCorner;
         rayCastingCamera.screenPlaneWidth = screenPlaneWidth;
         rayCastingCamera.screenPlaneHeight = screenPlaneHeight;
+
+        // Update One Ray
+        if (mode == Mode.RayCasting && oneRayIndex > 0 && oneRayIndex < textureWidth * textureHeight)
+        {
+            int x = oneRayIndex % textureWidth;
+            int y = textureHeight - oneRayIndex / textureWidth - 1;
+            Vector2 screenOffset = new Vector2((x + 0.5f) / textureWidth, (y + 0.5f) / textureHeight);
+            Vector3 screenPoint = screenLowerLeftCorner
+                                  + screenOffset.x * screenPlaneWidth * right
+                                  + screenOffset.y * screenPlaneHeight * up;
+
+            Vector3 origin = pos;
+            Vector3 dir = Vector3.Normalize(screenPoint - origin);
+            float depth = ZBufferTexture2D.GetPixel(x, y).r;
+            Vector3 end = origin + oneRayAppear * depth * dir;
+
+            matrix = Matrix4x4.Translate(0.5f * (origin + end))
+                     * Matrix4x4.Rotate(Quaternion.FromToRotation(Vector3.up, dir));
+
+            oneRay.transform.SetLocalPositionAndRotation(matrix.GetPosition(), matrix.rotation);
+            oneRay.transform.localScale = new Vector3(rayWidth, 0.5f * oneRayAppear * depth, rayWidth);
+        }
+        else
+        {
+            oneRay.transform.position = pos;
+            oneRay.transform.localScale = Vector3.zero;
+        }
+        
+        // Update All Rays
+        if (mode == Mode.RayCasting)
+        {
+            for (int i = 0; i < textureWidth * textureHeight; i++)
+            {
+                int x = i % textureWidth;
+                int y = textureHeight - i / textureWidth - 1;
+                Vector2 screenOffset = new Vector2((x + 0.5f) / textureWidth, (y + 0.5f) / textureHeight);
+                Vector3 screenPoint = screenLowerLeftCorner
+                                      + screenOffset.x * screenPlaneWidth * right
+                                      + screenOffset.y * screenPlaneHeight * up;
+
+                Vector3 origin = pos;
+                Vector3 dir = Vector3.Normalize(screenPoint - origin);
+                float depth = ZBufferTexture2D.GetPixel(x, y).r;
+                Vector3 end = origin + allRaysAppear * depth * dir;
+
+                matrix = Matrix4x4.Translate(0.5f * (origin + end))
+                         * Matrix4x4.Rotate(Quaternion.FromToRotation(Vector3.up, dir));
+
+                allRays[i].transform.SetLocalPositionAndRotation(matrix.GetPosition(), matrix.rotation);
+                allRays[i].transform.localScale = new Vector3(rayWidth, 0.5f * allRaysAppear * depth, rayWidth);
+            }
+        }
+        else
+        {
+            foreach (var ray in allRays)
+            {
+                ray.transform.position = pos;
+                ray.transform.localScale = Vector3.zero;
+            }
+        }
+        
+        // Update One Triangle Ray
+        if (mode == Mode.Rasterizer && oneTriangleRayIndex > 0 && oneTriangleRayIndex < triangles.Length)
+        {
+            for (int i = 0; i < 3; i++)
+            {
+                Vector3 p = triangles[oneTriangleRayIndex][i].xyz;
+                Vector3 origin = pos;
+                Vector3 dir = p - origin;
+                Vector3 end = origin + oneTriangleRayAppear * dir;
+
+                matrix = Matrix4x4.Translate(0.5f * (origin + end))
+                         * Matrix4x4.Rotate(Quaternion.FromToRotation(Vector3.up, dir));
+
+                oneTriangleRay[i].transform.SetLocalPositionAndRotation(matrix.GetPosition(), matrix.rotation);
+                oneTriangleRay[i].transform.localScale = new Vector3(
+                    rayWidth,
+                    0.5f * oneTriangleRayAppear * Vector3.Magnitude(dir),
+                    rayWidth);
+            }
+        }
+        else
+        {
+            for (int i = 0; i < 3; i++)
+            {
+                oneTriangleRay[i].transform.position = pos;
+                oneTriangleRay[i].transform.localScale = Vector3.zero;
+            }
+        }
+        
+        // Update All Triangle Rays
+        if (mode == Mode.Rasterizer)
+        {
+            for (int n = 0; n < triangles.Length; n++)
+            {
+                for (int i = 0; i < 3; i++)
+                {
+                    Vector3 p = triangles[n][i].xyz;
+                    Vector3 origin = pos;
+                    Vector3 dir = p - origin;
+                    Vector3 end = origin + allTriangleRaysAppear * dir;
+
+                    matrix = Matrix4x4.Translate(0.5f * (origin + end))
+                             * Matrix4x4.Rotate(Quaternion.FromToRotation(Vector3.up, dir));
+
+                    allTriangleRays[n * 3 + i].transform.SetLocalPositionAndRotation(matrix.GetPosition(), matrix.rotation);
+                    allTriangleRays[n * 3 + i].transform.localScale = new Vector3(
+                        rayWidth,
+                        0.5f * allTriangleRaysAppear * Vector3.Magnitude(dir),
+                        rayWidth);
+                }
+            }
+        }
+        else
+        {
+            foreach (var ray in allTriangleRays)
+            {
+                ray.transform.position = pos;
+                ray.transform.localScale = Vector3.zero;
+            }
+        }
+        
+        // Update Z-Buffer Texts
+        for (int i = 0; i < textureWidth * textureHeight; i++)
+        {
+            int x = i % textureWidth;
+            int y = textureHeight - i / textureWidth - 1;
+            Vector2 screenOffset =
+                new Vector2((x + 0.5f) / textureWidth, (y + 0.5f) / textureHeight) * 2.0f - Vector2.one;
+            matrix = camera.transform.localToWorldMatrix
+                     * Matrix4x4.Translate(
+                         new Vector3(0.5f * screenOffset.x * screenPlaneWidth,
+                             0.5f * screenOffset.y * screenPlaneHeight + ZBufferPlaneYMovement,
+                             camera.nearClipPlane * 1.0049f));
+
+            float depth = ZBufferTexture2D.GetPixel(x, y).r;
+            float color = Mathf.Pow(depth, ZBufferToneMapping);
+            color = -0.2f * color + (color > 0.5f ? 0.2f : 1.0f);
+            
+            GameObject obj = ZBufferTexts[i];
+            obj.GetComponent<MeshRenderer>().material.SetColor("_FaceColor", new Color(color, color, color, 1.0f));
+            
+            TextMeshPro tmp = obj.GetComponent<TextMeshPro>();
+            tmp.transform.SetLocalPositionAndRotation(matrix.GetPosition(), matrix.rotation);
+            tmp.transform.localScale = new Vector3(ZBufferTextSize, ZBufferTextSize, ZBufferTextSize);
+            tmp.text = depth.ToString("F2");
+        }
     }
 
     private GameObject[] GetAllGameObjects()
@@ -159,11 +480,14 @@ public class CameraModel : MonoBehaviour
         List<Triangle> triangleList = new List<Triangle>();
         foreach (GameObject gameObject in gameObjects)
         {
-            if (gameObject == displayPlane)
-            {
-                continue;
-            }
-
+            // if (gameObject.TryGetComponent<MeshRenderer>(out MeshRenderer meshRenderer))
+            // {
+            //     if (meshRenderer.material.shader.name == "Shader Graphs/Icosphere")
+            //     {
+            //         meshRenderer.material.SetFloat("_Index_Offset", triangleList.Count);
+            //         Debug.Log(meshRenderer.material.name + " : " + triangleList.Count);
+            //     }
+            // }
             if (!gameObject.TryGetComponent<MeshFilter>(out MeshFilter meshFilter))
             {
                 continue;
@@ -204,7 +528,7 @@ public class CameraModel : MonoBehaviour
 
         return texture;
     }
-
+    
     private void InitRasterizer()
     {
         // Get Kernels
@@ -222,6 +546,10 @@ public class CameraModel : MonoBehaviour
         rasterizerShader.SetInt("textureHeight", textureHeight);
         rasterizerShader.SetInt("triangleCount", triangles.Length);
         rasterizerShader.SetInt("clippedTriangleCount", triangles.Length * 2);
+        rasterizerShader.SetInt("triangleClampMin", Math.Clamp(triangleClampMin, 0, triangles.Length));
+        rasterizerShader.SetInt("triangleClampMax", Math.Clamp(triangleClampMax, 0, triangles.Length));
+        rasterizerShader.SetFloat("triangleAppear", Math.Clamp(triangleAppear, 0.0f, 1.0f));
+        rasterizerShader.SetBool("disableZBuffer", disableZBuffer);
 
         // Bind Compute Buffers
         rasterizerShader.SetBuffer(kernelGeometryProcessing, "triangleBuffer", triangleBuffer);
@@ -253,22 +581,134 @@ public class CameraModel : MonoBehaviour
         rayCastingShader.SetInt("renderWidth", textureWidth);
         rayCastingShader.SetInt("renderHeight", textureHeight);
         rayCastingShader.SetInt("triangleCount", triangles.Length);
+        rayCastingShader.SetInt("pixelClampMin", Math.Clamp(pixelClampMin, 0, textureWidth * textureHeight - 1));
+        rayCastingShader.SetInt("pixelClampMax", Math.Clamp(pixelClampMax, 0, textureWidth * textureHeight - 1));
 
         // Bind Compute Buffers
         rayCastingShader.SetBuffer(kernelRayCasting, "triangleBuffer", triangleBuffer);
         rayCastingShader.SetBuffer(kernelRayCasting, "cameraBuffer", cameraBuffer);
         
         // Bind Render Texture to Compute Shader
-        rayCastingShader.SetTexture(kernelRayCasting, "renderResult", renderTexture);
+        rayCastingShader.SetTexture(kernelRayCasting, "frameBuffer", renderTexture);
+        rayCastingShader.SetTexture(kernelRayCasting, "depthBuffer", ZBufferTexture);
+    }
+
+    private void InitOneRay()
+    {
+        oneRay = GameObject.CreatePrimitive(PrimitiveType.Cylinder);
+    }
+    
+    private void InitAllRays()
+    {
+        List<GameObject> objList = new List<GameObject>();
+        for (int i = 0; i < textureWidth * textureHeight; i++)
+        {
+            objList.Add(GameObject.CreatePrimitive(PrimitiveType.Cylinder));
+        }
+        allRays = objList.ToArray();
+    }
+    
+    private void InitOneTriangleRay()
+    {
+        oneTriangleRay = new GameObject[]
+        {
+            GameObject.CreatePrimitive(PrimitiveType.Cylinder),
+            GameObject.CreatePrimitive(PrimitiveType.Cylinder),
+            GameObject.CreatePrimitive(PrimitiveType.Cylinder)
+        };
+    }
+    
+    private void InitAllTriangleRays()
+    {
+        List<GameObject> objList = new List<GameObject>();
+        for (int i = 0; i < triangles.Length * 3; i++)
+        {
+            objList.Add(GameObject.CreatePrimitive(PrimitiveType.Cylinder));
+        }
+        allTriangleRays = objList.ToArray();
+    }
+
+    private void InitZBufferTexts()
+    {
+        List<GameObject> objList = new List<GameObject>();
+        for (int i = 0; i < textureWidth * textureHeight; i++)
+        {
+            GameObject obj = new GameObject("Text");
+            TextMeshPro tmp = obj.AddComponent<TextMeshPro>();
+            obj.GetComponent<MeshRenderer>().material = new Material(ZBufferTextShader);
+            tmp.alignment = TextAlignmentOptions.Center;
+            tmp.enableWordWrapping = false;
+            tmp.font = ZBufferTextFont;
+            tmp.fontStyle = FontStyles.Bold;
+            objList.Add(obj);
+        }
+        ZBufferTexts = objList.ToArray();
+    }
+
+    private void GetZBuffer()
+    {
+        RenderTexture.active = ZBufferTexture;
+        ZBufferTexture2D.ReadPixels(new Rect(0, 0, textureWidth, textureHeight), 0, 0);
+        ZBufferTexture2D.Apply();
     }
 
     private void Start()
     {
         // Get Camera
         camera = GetComponent<Camera>();
-
+        
         // Get All Triangles
         triangles = GetAllTriangles();
+
+        // Create Display Plane
+        displayPlane = GameObject.CreatePrimitive(PrimitiveType.Quad);
+        
+        // Create Z-Buffer Plane
+        ZBufferPlane = GameObject.CreatePrimitive(PrimitiveType.Quad);
+        
+        // Create Z-Buffer Texts
+        InitZBufferTexts();
+        
+        // Create Wireframe
+        topLine = GameObject.CreatePrimitive(PrimitiveType.Cylinder);
+        bottomLine = GameObject.CreatePrimitive(PrimitiveType.Cylinder);
+        leftLine = GameObject.CreatePrimitive(PrimitiveType.Cylinder);
+        rightLine = GameObject.CreatePrimitive(PrimitiveType.Cylinder);
+        topLeftLine = GameObject.CreatePrimitive(PrimitiveType.Cylinder);
+        topRightLine = GameObject.CreatePrimitive(PrimitiveType.Cylinder);
+        bottomLeftLine = GameObject.CreatePrimitive(PrimitiveType.Cylinder);
+        bottomRightLine = GameObject.CreatePrimitive(PrimitiveType.Cylinder);
+        
+        // Assign Material to Wireframe
+        topLine.GetComponent<MeshRenderer>().material = wireframeMaterial;
+        bottomLine.GetComponent<MeshRenderer>().material = wireframeMaterial;
+        leftLine.GetComponent<MeshRenderer>().material = wireframeMaterial;
+        rightLine.GetComponent<MeshRenderer>().material = wireframeMaterial;
+        topLeftLine.GetComponent<MeshRenderer>().material = wireframeMaterial;
+        topRightLine.GetComponent<MeshRenderer>().material = wireframeMaterial;
+        bottomLeftLine.GetComponent<MeshRenderer>().material = wireframeMaterial;
+        bottomRightLine.GetComponent<MeshRenderer>().material = wireframeMaterial;
+        
+        // Init Rays
+        InitOneRay();
+        InitAllRays();
+        InitOneTriangleRay();
+        InitAllTriangleRays();
+        
+        // Assign Material to Rays
+        oneRay.GetComponent<MeshRenderer>().material = rayMaterial;
+        foreach (var obj in allRays)
+        {
+            obj.GetComponent<MeshRenderer>().material = rayMaterial;
+        }
+        foreach (var obj in oneTriangleRay)
+        {
+            obj.GetComponent<MeshRenderer>().material = rayMaterial;
+        }
+        foreach (var obj in allTriangleRays)
+        {
+            obj.GetComponent<MeshRenderer>().material = rayMaterial;
+        }
         
         // Create Triangle Buffer
         triangleBuffer = new ComputeBuffer(triangles.Length, UnsafeUtility.SizeOf<Triangle>());
@@ -278,36 +718,97 @@ public class CameraModel : MonoBehaviour
 
         // Create Render Textures
         renderTexture = CreateRenderTexture(RenderTextureFormat.ARGBFloat, FilterMode.Point);
-        ZBufferTexture = CreateRenderTexture(RenderTextureFormat.RFloat, FilterMode.Point);
+        ZBufferTexture = CreateRenderTexture(RenderTextureFormat.ARGBFloat, FilterMode.Point);
         
+        // Create Texture2D
+        ZBufferTexture2D = new Texture2D(textureWidth, textureHeight, TextureFormat.RGBAFloat, false);
+        
+        // Init Compute Shaders
         InitRasterizer();
         InitRayCasting();
 
-        // Create Display Plane
-        displayPlane = GameObject.CreatePrimitive(PrimitiveType.Quad);
-
         // Bind Render Texture to Display Plane
-        renderer = displayPlane.GetComponent<MeshRenderer>();
-        renderer.material = new Material(displayPlaneShader);
-        renderer.enabled = true;
-        renderer.material.SetTexture("_MainTex", renderTexture);
-        renderer.material.SetFloat("_Opacity", opacity);
+        displayPlaneMeshRenderer = displayPlane.GetComponent<MeshRenderer>();
+        displayPlaneMeshRenderer.material = displayPlaneMaterial;
+        displayPlaneMeshRenderer.enabled = true;
+        displayPlaneMaterial.SetTexture("_MainTex", renderTexture);
+        displayPlaneMaterial.SetFloat("_Aspect", camera.aspect);
+        displayPlaneMaterial.SetFloat("_Opacity", displayPlaneOpacity);
+        displayPlaneMaterial.SetFloat("_Emission", screenEmission);
+        displayPlaneMaterial.SetFloat("_Border_Width", borderWidth);
+        displayPlaneMaterial.SetFloat("_Texture_Width", textureWidth);
+        displayPlaneMaterial.SetFloat("_Texture_Height", textureHeight);
+        displayPlaneMaterial.SetColor("_Grid_Color", gridColor);
+        displayPlaneMaterial.SetFloat("_Grid_Emission", gridEmission);
+        displayPlaneMaterial.SetFloat("_Screen_Emission", screenEmission);
+        displayPlaneMaterial.SetFloat("_Appear_Grid", displayPlaneAppearGrid);
+        displayPlaneMaterial.SetFloat("_Appear_Screen", displayPlaneAppearScreen);
+        displayPlaneMaterial.SetFloat("_Appear_Transition_Width", appearTransitionWidth);
+        displayPlaneMaterial.SetFloat("_Appear_Transition_Smoothness", appearTransitionSmoothness);
+        displayPlaneMaterial.SetFloat("_Tone_Mapping", 1.0f);
+        
+        // Bind Z-Buffer Texture to Z-Buffer Plane
+        ZBufferPlaneMeshRenderer = ZBufferPlane.GetComponent<MeshRenderer>();
+        ZBufferPlaneMeshRenderer.material = ZBufferPlaneMaterial;
+        ZBufferPlaneMeshRenderer.enabled = true;
+        ZBufferPlaneMaterial.SetTexture("_MainTex", ZBufferTexture);
+        ZBufferPlaneMaterial.SetFloat("_Aspect", camera.aspect);
+        ZBufferPlaneMaterial.SetFloat("_Opacity", ZBufferPlaneOpacity);
+        ZBufferPlaneMaterial.SetFloat("_Emission", screenEmission);
+        ZBufferPlaneMaterial.SetFloat("_Border_Width", borderWidth);
+        ZBufferPlaneMaterial.SetFloat("_Texture_Width", textureWidth);
+        ZBufferPlaneMaterial.SetFloat("_Texture_Height", textureHeight);
+        ZBufferPlaneMaterial.SetColor("_Grid_Color", gridColor);
+        ZBufferPlaneMaterial.SetFloat("_Grid_Emission", gridEmission);
+        ZBufferPlaneMaterial.SetFloat("_Screen_Emission", screenEmission);
+        ZBufferPlaneMaterial.SetFloat("_Appear_Grid", ZBufferPlaneAppearGrid);
+        ZBufferPlaneMaterial.SetFloat("_Appear_Screen", ZBufferPlaneAppearScreen);
+        ZBufferPlaneMaterial.SetFloat("_Appear_Transition_Width", appearTransitionWidth);
+        ZBufferPlaneMaterial.SetFloat("_Appear_Transition_Smoothness", appearTransitionSmoothness);
+        ZBufferPlaneMaterial.SetFloat("_Tone_Mapping", ZBufferToneMapping);
     }
  
     private void Update()
     {
-        // Update Display Plane
-        UpdateDisplayPlane();
-
-        // Update Opacity
-        renderer.material.SetFloat("_Opacity", opacity);
+        // Get Z-Buffer
+        GetZBuffer();
+        
+        // Update Camera
+        UpdateCamera();
+        
+        // Update Display Plane Material
+        displayPlaneMaterial.SetFloat("_Aspect", camera.aspect);
+        displayPlaneMaterial.SetFloat("_Opacity", displayPlaneOpacity);
+        displayPlaneMaterial.SetFloat("_Emission", screenEmission);
+        displayPlaneMaterial.SetFloat("_Border_Width", borderWidth);
+        displayPlaneMaterial.SetColor("_Grid_Color", gridColor);
+        displayPlaneMaterial.SetFloat("_Grid_Emission", gridEmission);
+        displayPlaneMaterial.SetFloat("_Screen_Emission", screenEmission);
+        displayPlaneMaterial.SetFloat("_Appear_Grid", displayPlaneAppearGrid);
+        displayPlaneMaterial.SetFloat("_Appear_Screen", displayPlaneAppearScreen);
+        displayPlaneMaterial.SetFloat("_Appear_Transition_Width", appearTransitionWidth);
+        displayPlaneMaterial.SetFloat("_Appear_Transition_Smoothness", appearTransitionSmoothness);
+        
+        // Update Z-Buffer Plane Material
+        ZBufferPlaneMaterial.SetFloat("_Aspect", camera.aspect);
+        ZBufferPlaneMaterial.SetFloat("_Opacity", ZBufferPlaneOpacity);
+        ZBufferPlaneMaterial.SetFloat("_Emission", screenEmission);
+        ZBufferPlaneMaterial.SetFloat("_Border_Width", borderWidth);
+        ZBufferPlaneMaterial.SetColor("_Grid_Color", gridColor);
+        ZBufferPlaneMaterial.SetFloat("_Grid_Emission", gridEmission);
+        ZBufferPlaneMaterial.SetFloat("_Screen_Emission", screenEmission);
+        ZBufferPlaneMaterial.SetFloat("_Appear_Grid", ZBufferPlaneAppearGrid);
+        ZBufferPlaneMaterial.SetFloat("_Appear_Screen", ZBufferPlaneAppearScreen);
+        ZBufferPlaneMaterial.SetFloat("_Appear_Transition_Width", appearTransitionWidth);
+        ZBufferPlaneMaterial.SetFloat("_Appear_Transition_Smoothness", appearTransitionSmoothness);
+        ZBufferPlaneMaterial.SetFloat("_Tone_Mapping", ZBufferToneMapping);
 
         // Execute Shader
-        if (mode)
+        if (mode == Mode.Rasterizer)
         {
             ExecuteRasterizer();
         }
-        else
+        else if (mode == Mode.RayCasting)
         {
             ExecuteRayCasting();
         }
@@ -329,6 +830,11 @@ public class CameraModel : MonoBehaviour
                 new Vector4(0.0f, 0.0f, -far * near / (far - near), 0.0f))
             * camera.transform.worldToLocalMatrix);
         
+        rasterizerShader.SetInt("triangleClampMin", Math.Clamp(triangleClampMin, 0, triangles.Length - 1));
+        rasterizerShader.SetInt("triangleClampMax", Math.Clamp(triangleClampMax, 0, triangles.Length - 1));
+        rasterizerShader.SetFloat("triangleAppear", Math.Clamp(triangleAppear, 0.0f, 1.0f));
+        rasterizerShader.SetBool("disableZBuffer", disableZBuffer);
+        
         // Clear Frame
         rasterizerShader.Dispatch(kernelClear, textureWidth / 30, textureHeight / 30, 1);
 
@@ -336,12 +842,17 @@ public class CameraModel : MonoBehaviour
         rasterizerShader.Dispatch(kernelGeometryProcessing, (int) Mathf.Ceil(triangles.Length / 512.0f), 1, 1);
         
         // Execute Render Shader
-        rasterizerShader.Dispatch(kernelRasterizer, textureWidth / 30, textureHeight / 30, triangles.Length * 2);
+        for (int i = Math.Max(triangleClampMin, 0); i >= 0 && i < triangleClampMax && i < triangles.Length * 2; i++)
+        {
+            rasterizerShader.SetInt("triangleIndex", i);
+            rasterizerShader.Dispatch(kernelRasterizer, textureWidth / 30, textureHeight / 30, 1);
+        }
     }
 
     private void ExecuteRayCasting()
     {
-        UpdateRayCastingCamera();
+        rayCastingShader.SetInt("pixelClampMin", Math.Clamp(pixelClampMin, 0, textureWidth * textureHeight - 1));
+        rayCastingShader.SetInt("pixelClampMax", Math.Clamp(pixelClampMax, 0, textureWidth * textureHeight - 1));
         cameraBuffer.SetData(new RayCastingCamera[] { rayCastingCamera });
         rayCastingShader.Dispatch(kernelRayCasting, textureWidth / 30, textureHeight / 30, 1);
     }

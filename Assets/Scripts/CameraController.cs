@@ -50,6 +50,8 @@ public class CameraController : MonoBehaviour
             rotationX = MapRotationXToValidRange(transform.rotation.eulerAngles.x);
             rotationY = transform.rotation.eulerAngles.y;
             speed = Vector3.zero;
+            
+            return;
         }
 
         if (!dispatch)

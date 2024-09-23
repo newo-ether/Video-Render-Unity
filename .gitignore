@@ -1,4 +1,5 @@
 .vs
+.idea
 Build
 Library
 Logs
@@ -7,4 +8,5 @@ Temp
 .vsconfig
 Assembly-CSharp.csproj
 Assembly-CSharp-Editor.csproj
-NERenderer-Unity.sln
+Video-Render-Unity.sln
+Video-Render-Unity.sln.DotSettings.user

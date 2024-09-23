@@ -7,7 +7,8 @@ MonoImporter:
   - displayPlaneShader: {fileID: 4800000, guid: 067d864217100d74793d1664f257b6aa,
       type: 3}
   - rasterizerShader: {fileID: 7200000, guid: 403c336541be12a40a300f87686261fc, type: 3}
-  executionOrder: 300
+  - rayCastingShader: {fileID: 7200000, guid: 0642710538b242448aac640f28b9c7de, type: 3}
+  executionOrder: 0
   icon: {instanceID: 0}
   userData: 
   assetBundleName: 

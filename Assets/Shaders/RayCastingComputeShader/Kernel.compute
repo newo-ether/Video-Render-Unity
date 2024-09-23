@@ -7,11 +7,26 @@
 #include "Ray.hlsl"
 #include "Film.hlsl"
 
+// Uniform Variable
+int pixelClampMin;
+
+// Uniform Variable
+int pixelClampMax;
+
 [numthreads(30,30,1)]
 void KernelRender (uint3 id : SV_DispatchThreadID)
 {
-    uint2 screenIndex = id.xy;
-    Ray ray = CameraGetSampleRay(screenIndex);
-    float3 color = RayCasting(ray, screenIndex);
-    SetFilmPixel(screenIndex, float4((float3) color, 1.0f));
+    int index = (GetFilmHeight() - (int) id.y - 1) * GetFilmWidth() + (int) id.x;
+
+    if (index > pixelClampMin && index <= pixelClampMax)
+    {
+        uint2 screenIndex = id.xy;
+        Ray ray = CameraGetSampleRay(screenIndex);
+        RayCasting(ray, screenIndex);
+    }
+    else
+    {
+        SetFilmPixel(id.xy, float4((float3) 0.0f, 1.0f));
+        SetDepthPixel(id.xy, 0.0f);
+    }
 }
