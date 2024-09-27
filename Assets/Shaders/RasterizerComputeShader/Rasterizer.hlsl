@@ -50,10 +50,28 @@ int textureWidth;
 int textureHeight;
 
 // Uniform Variable
+uint triangleClampMin;
+
+// Uniform Variable
+uint triangleClampMax;
+
+// Uniform Variable
 float triangleAppear;
 
 // Uniform Variable
 bool disableZBuffer;
+
+// Uniform Variable
+uint triangleOne;
+
+// Uniform Variable
+uint triangleTwo;
+
+// Uniform Variable
+float triangleOneAppear;
+
+// Uniform Variable
+float triangleTwoAppear;
 
 float3 Rand(int index)
 {
@@ -341,33 +359,38 @@ void RasterizeTriangle(uint3 id)
 {
     uint4 bound = triangleBoundBuffer[id.z];
 
-    if ((id.x >= bound.x && id.y >= bound.y) && (id.x <= bound.z && id.y <= bound.w) &&
-        (float) (id.y * (bound.w - bound.y) + (id.x - bound.x)) / (textureWidth * textureHeight - 1) < triangleAppear)
+    if ((id.x >= bound.x && id.y >= bound.y) && (id.x <= bound.z && id.y <= bound.w))
     {
-        Triangle triNDC = triangleNDCBuffer[id.z];
-        Triangle triNDCDivW = triangleNDCDivWBuffer[id.z];
-        float2 p = ScreenIndexToNDC(id.xy);
-        Barycentric bc = GetTriangleBarycentric(triNDC, triNDCDivW, p);
-
-        if (bc.isInside)
+        float appear = (float) ((bound.z - bound.x + 1) * (bound.w - id.y) + (id.x - bound.x + 1)) / ((bound.z - bound.x + 1) * (bound.w - bound.y + 1) + 1);
+        if ((id.z == triangleOne && appear < triangleOneAppear) ||
+            (id.z == triangleTwo && appear < triangleTwoAppear) ||
+            (id.z > triangleClampMin && id.z <= triangleClampMax && appear < triangleAppear))
         {
-            float depth = dot(bc.bcCoord, float3(triNDC.vertex[2].z, triNDC.vertex[0].z, triNDC.vertex[1].z));
-            float w = dot(bc.bcCoord, float3(triNDC.vertex[2].w, triNDC.vertex[0].w, triNDC.vertex[1].w));
-            depth /= w;
+            Triangle triNDC = triangleNDCBuffer[id.z];
+            Triangle triNDCDivW = triangleNDCDivWBuffer[id.z];
+            float2 p = ScreenIndexToNDC(id.xy);
+            Barycentric bc = GetTriangleBarycentric(triNDC, triNDCDivW, p);
 
-            if (!disableZBuffer)
+            if (bc.isInside)
             {
-                if (depth < ZBuffer[id.xy].r)
+                float depth = dot(bc.bcCoord, float3(triNDC.vertex[2].z, triNDC.vertex[0].z, triNDC.vertex[1].z));
+                float w = dot(bc.bcCoord, float3(triNDC.vertex[2].w, triNDC.vertex[0].w, triNDC.vertex[1].w));
+                depth /= w;
+
+                if (!disableZBuffer)
+                {
+                    if (depth < ZBuffer[id.xy].r)
+                    {
+                        float4 color = float4(Rand(id.z > triangleCount ? id.z - triangleCount : id.z), 1.0f);
+                        frameBuffer[id.xy] = color;
+                        ZBuffer[id.xy] = float4((float3) depth, 1.0f);
+                    }
+                }
+                else
                 {
                     float4 color = float4(Rand(id.z > triangleCount ? id.z - triangleCount : id.z), 1.0f);
                     frameBuffer[id.xy] = color;
-                    ZBuffer[id.xy] = float4((float3) depth, 1.0f);
                 }
-            }
-            else
-            {
-                float4 color = float4(Rand(id.z > triangleCount ? id.z - triangleCount : id.z), 1.0f);
-                frameBuffer[id.xy] = color;
             }
         }
     }

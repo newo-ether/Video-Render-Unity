@@ -172,8 +172,8 @@ Material:
     - _AlphaRemapMin: 0
     - _AlphaSrcBlend: 1
     - _Anisotropy: 0
-    - _Appear_Grid: -0.2
-    - _Appear_Screen: -0.2
+    - _Appear_Grid: -1
+    - _Appear_Screen: -1
     - _Appear_Transition_Smoothness: 2.8
     - _Appear_Transition_Width: 0.2
     - _Aspect: 1.7777778

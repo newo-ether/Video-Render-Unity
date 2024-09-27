@@ -148,10 +148,10 @@ Material:
     - _Anisotropy: 0
     - _Appear: -0.35
     - _Appear_Color: 0
-    - _Appear_Grid: -3.15
-    - _Appear_Rand: 0
+    - _Appear_Grid: 4
+    - _Appear_Rand: 4
     - _Appear_Smoothness: 1.96
-    - _Appear_Solid: -0.73
+    - _Appear_Solid: 4
     - _Appear_Transition_Smoothness: 2.8
     - _Appear_Transition_Width: 2
     - _BlendMode: 0

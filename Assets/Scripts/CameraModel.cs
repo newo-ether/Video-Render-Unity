@@ -146,6 +146,13 @@ public class CameraModel : MonoBehaviour
     [Range(0.0f, 1.0f)]
     public float triangleAppear = 0.0f;
 
+    public int triangleOne = 0;
+    public int triangleTwo = 0;
+    [Range(0.0f, 1.0f)]
+    public float triangleOneAppear = 0.0f;
+    [Range(0.0f, 1.0f)]
+    public float triangleTwoAppear = 0.0f;
+
     private Texture2D ZBufferTexture2D;
     
     public Material displayPlaneMaterial;
@@ -344,7 +351,7 @@ public class CameraModel : MonoBehaviour
         }
         else
         {
-            oneRay.transform.position = pos;
+            oneRay.transform.position = Vector3.zero;
             oneRay.transform.localScale = Vector3.zero;
         }
         
@@ -376,7 +383,7 @@ public class CameraModel : MonoBehaviour
         {
             foreach (var ray in allRays)
             {
-                ray.transform.position = pos;
+                ray.transform.position = Vector3.zero;
                 ray.transform.localScale = Vector3.zero;
             }
         }
@@ -405,7 +412,7 @@ public class CameraModel : MonoBehaviour
         {
             for (int i = 0; i < 3; i++)
             {
-                oneTriangleRay[i].transform.position = pos;
+                oneTriangleRay[i].transform.position = Vector3.zero;
                 oneTriangleRay[i].transform.localScale = Vector3.zero;
             }
         }
@@ -437,7 +444,7 @@ public class CameraModel : MonoBehaviour
         {
             foreach (var ray in allTriangleRays)
             {
-                ray.transform.position = pos;
+                ray.transform.position = Vector3.zero;
                 ray.transform.localScale = Vector3.zero;
             }
         }
@@ -834,6 +841,10 @@ public class CameraModel : MonoBehaviour
         rasterizerShader.SetInt("triangleClampMax", Math.Clamp(triangleClampMax, 0, triangles.Length - 1));
         rasterizerShader.SetFloat("triangleAppear", Math.Clamp(triangleAppear, 0.0f, 1.0f));
         rasterizerShader.SetBool("disableZBuffer", disableZBuffer);
+        rasterizerShader.SetInt("triangleOne", Math.Clamp(triangleOne, 0, triangles.Length - 1));
+        rasterizerShader.SetInt("triangleTwo", Math.Clamp(triangleTwo, 0, triangles.Length - 1));
+        rasterizerShader.SetFloat("triangleOneAppear", triangleOneAppear);
+        rasterizerShader.SetFloat("triangleTwoAppear", triangleTwoAppear);
         
         // Clear Frame
         rasterizerShader.Dispatch(kernelClear, textureWidth / 30, textureHeight / 30, 1);
@@ -842,7 +853,7 @@ public class CameraModel : MonoBehaviour
         rasterizerShader.Dispatch(kernelGeometryProcessing, (int) Mathf.Ceil(triangles.Length / 512.0f), 1, 1);
         
         // Execute Render Shader
-        for (int i = Math.Max(triangleClampMin, 0); i >= 0 && i < triangleClampMax && i < triangles.Length * 2; i++)
+        for (int i = 0; i < triangles.Length * 2; i++)
         {
             rasterizerShader.SetInt("triangleIndex", i);
             rasterizerShader.Dispatch(kernelRasterizer, textureWidth / 30, textureHeight / 30, 1);

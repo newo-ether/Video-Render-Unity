@@ -30,13 +30,13 @@ MonoBehaviour:
     m_Value: 0
   nearFocusEnd:
     m_OverrideState: 1
-    m_Value: 4
+    m_Value: 4.73
   farFocusStart:
     m_OverrideState: 1
-    m_Value: 10
+    m_Value: 9.2
   farFocusEnd:
     m_OverrideState: 1
-    m_Value: 20
+    m_Value: 59.61
   m_NearSampleCount:
     m_OverrideState: 1
     m_Value: 8
@@ -149,25 +149,7 @@ MonoBehaviour:
   directionalLightsOnly:
     m_OverrideState: 0
     m_Value: 0
---- !u!114 &11400000
-MonoBehaviour:
-  m_ObjectHideFlags: 0
-  m_CorrespondingSourceObject: {fileID: 0}
-  m_PrefabInstance: {fileID: 0}
-  m_PrefabAsset: {fileID: 0}
-  m_GameObject: {fileID: 0}
-  m_Enabled: 1
-  m_EditorHideFlags: 0
-  m_Script: {fileID: 11500000, guid: d7fd9488000d3734a9e00ee676215985, type: 3}
-  m_Name: SkyandFogSettingsProfile
-  m_EditorClassIdentifier: 
-  components:
-  - {fileID: -4151792930034644520}
-  - {fileID: 7642060734654139733}
-  - {fileID: -5017798596490563769}
-  - {fileID: 6556125132755662402}
-  - {fileID: 3244137610359438349}
---- !u!114 &3244137610359438349
+--- !u!114 &-2569331558480470518
 MonoBehaviour:
   m_ObjectHideFlags: 3
   m_CorrespondingSourceObject: {fileID: 0}
@@ -184,13 +166,13 @@ MonoBehaviour:
     m_OverrideState: 1
     m_Value: 2
   intensity:
-    m_OverrideState: 1
-    m_Value: 2
+    m_OverrideState: 0
+    m_Value: 0
   maximumVelocity:
-    m_OverrideState: 1
+    m_OverrideState: 0
     m_Value: 200
   minimumVelocity:
-    m_OverrideState: 1
+    m_OverrideState: 0
     m_Value: 2
   cameraMotionBlur:
     m_OverrideState: 0
@@ -213,6 +195,24 @@ MonoBehaviour:
   m_SampleCount:
     m_OverrideState: 1
     m_Value: 12
+--- !u!114 &11400000
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: d7fd9488000d3734a9e00ee676215985, type: 3}
+  m_Name: SkyandFogSettingsProfile
+  m_EditorClassIdentifier: 
+  components:
+  - {fileID: -4151792930034644520}
+  - {fileID: 7642060734654139733}
+  - {fileID: -5017798596490563769}
+  - {fileID: 6556125132755662402}
+  - {fileID: -2569331558480470518}
 --- !u!114 &6556125132755662402
 MonoBehaviour:
   m_ObjectHideFlags: 3
